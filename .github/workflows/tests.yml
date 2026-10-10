@@ -1,0 +1,63 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+# Least privilege for the CI token: read the code, nothing else.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sentinelforge
+          POSTGRES_USER: sentinelforge_admin
+          # Throwaway password for a database that exists only during this CI job.
+          POSTGRES_PASSWORD: ci-only-admin-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinelforge_admin -d sentinelforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+
+    env:
+      SF_DB_HOST: 127.0.0.1
+      SF_DB_PORT: "5432"
+      SF_DB_NAME: sentinelforge
+      SF_DB_ADMIN_USER: sentinelforge_admin
+      SF_DB_ADMIN_PASSWORD: ci-only-admin-password
+      SF_RUN_INTEGRATION: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+
+      - name: Licence check (all dependencies must be free/open source)
+        run: bash scripts/check_licences.sh
+
+      - name: Lint
+        run: |
+          ruff check src tests
+          ruff format --check src tests
+
+      - name: Unit and integration tests
+        run: python -m pytest

@@ -1,0 +1,12 @@
+# Bash scripts must keep Unix (LF) line endings, even when the repo is
+# checked out on Windows. A Windows (CRLF) ending makes bash fail with
+# errors such as "$'\r': command not found".
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.sql text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.jsonl text eol=lf
+.env.example text eol=lf
