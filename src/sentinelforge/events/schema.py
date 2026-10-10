@@ -120,6 +120,23 @@ OptionalName = Annotated[
 OptionalPath = Annotated[
     Annotated[str, StringConstraints(max_length=1024)] | None, BeforeValidator(_empty_to_none)
 ]
+OptionalCommandLine = Annotated[
+    Annotated[str, StringConstraints(max_length=4096)] | None, BeforeValidator(_empty_to_none)
+]
+OptionalSha256 = Annotated[
+    Annotated[str, BeforeValidator(_lower_strip), StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+    | None,
+    BeforeValidator(_empty_to_none),
+]
+OptionalDomain = Annotated[
+    Annotated[
+        str,
+        BeforeValidator(_lower_strip),
+        StringConstraints(max_length=253, pattern=r"^[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$"),
+    ]
+    | None,
+    BeforeValidator(_empty_to_none),
+]
 
 
 class SecurityEvent(BaseModel):
@@ -147,7 +164,8 @@ class SecurityEvent(BaseModel):
     source_event_id: OptionalId = None
 
     # Who and what was involved (optional; depends on the category).
-    user: OptionalUsername = None
+    user: OptionalUsername = None  # the account that performed the action
+    target_user: OptionalUsername = None  # the account acted upon (e.g. added to a group)
     src_ip: OptionalIP = None
     src_port: OptionalPort = None
     dst_ip: OptionalIP = None
@@ -155,6 +173,11 @@ class SecurityEvent(BaseModel):
     process_name: OptionalName = None
     process_path: OptionalPath = None
     parent_process_name: OptionalName = None
+    process_command_line: OptionalCommandLine = None
+    file_sha256: OptionalSha256 = None
+    dst_domain: OptionalDomain = None
+    # The thing acted on: a group name, file path, security setting or URL path.
+    object_name: OptionalPath = None
 
     # Lab bookkeeping: which dataset and synthetic scenario produced the event.
     dataset_id: OptionalToken = None

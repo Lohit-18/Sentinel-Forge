@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sentinelforge"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Python, PostgreSQL and Bash-based SOC lab for security log ingestion, threat detection, event correlation, incident investigation and security analytics."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7,<3",          # event schema validation
     "pydantic-settings>=2.3,<3", # configuration from environment variables / .env
     "psycopg[binary]>=3.2,<4",   # PostgreSQL driver (parameterised SQL)
+    "pyyaml>=6,<7",              # read the lab inventory (configs/lab_inventory.yml)
 ]
 
 [project.optional-dependencies]

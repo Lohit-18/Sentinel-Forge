@@ -79,7 +79,73 @@ def cmd_events_validate(args: argparse.Namespace) -> int:
     return EXIT_OK if report.ok else EXIT_PROBLEM
 
 
+def cmd_events_generate(args: argparse.Namespace) -> int:
+    from sentinelforge.generator import generate_to_file
+    from sentinelforge.inventory import load_inventory
+
+    settings = load_settings()
+    inventory = load_inventory(settings.inventory_path)
+    out_path: Path = args.output or (settings.data_dir / "generated" / f"{args.dataset_id}.jsonl")
+    result = generate_to_file(
+        inventory, out_path, dataset_id=args.dataset_id, seed=args.seed, days=args.days
+    )
+    print(f"Generated {result.event_count} synthetic background events")
+    print(f"  Dataset:  {result.dataset_id}")
+    print(f"  Seed:     {result.seed} (same seed always produces the same events)")
+    print(f"  Days:     {result.days}")
+    print(f"  Written:  {out_path}")
+    print("Next: sentinelforge events ingest " + str(out_path))
+    return EXIT_OK
+
+
+def cmd_events_ingest(args: argparse.Namespace) -> int:
+    from sentinelforge.events.ingest import ingest_file
+    from sentinelforge.events.readers import UnsupportedFormat
+
+    settings = load_settings()
+    path: Path = args.file
+    if not path.is_file():
+        _err(f"file not found: {path}")
+        return EXIT_CONFIG
+    try:
+        result = ingest_file(settings, path, dataset_id=args.dataset_id)
+    except UnsupportedFormat as exc:
+        _err(str(exc))
+        return EXIT_CONFIG
+
+    print(f"Ingested {path}")
+    print(f"  Dataset:      {result.dataset_id}")
+    print(f"  Import ID:    {result.import_id}")
+    print(f"  Records read: {result.records_read}")
+    print(f"  Stored:       {result.stored}")
+    print(f"  Duplicates:   {result.duplicates} (already in the database)")
+    print(f"  Invalid:      {result.invalid}")
+    if result.unmapped_fields:
+        shown = ", ".join(sorted(result.unmapped_fields))
+        print(f"  Unmapped fields (kept in raw, not used by rules): {shown}")
+    for error in result.errors[: args.max_errors]:
+        print(f"  line {error.line_number:<5} {error.field}: {error.message}", file=sys.stderr)
+    hidden = len(result.errors) - args.max_errors
+    if hidden > 0:
+        print(f"  ... {hidden} more errors", file=sys.stderr)
+    print(f"Result: {'OK' if result.ok else 'COMPLETED WITH INVALID RECORDS'}")
+    return EXIT_OK if result.ok else EXIT_PROBLEM
+
+
 # --- db ----------------------------------------------------------------------
+def cmd_db_migrate(_args: argparse.Namespace) -> int:
+    from sentinelforge.db.migrate import migrate
+
+    settings = load_settings()
+    result = migrate(settings)
+    if result.applied:
+        print(f"Applied migrations: {', '.join(result.applied)}")
+    else:
+        print("Database schema is already up to date.")
+    print(f"Total migrations present: {len(result.applied) + len(result.already_current)}")
+    return EXIT_OK
+
+
 def cmd_db_bootstrap(_args: argparse.Namespace) -> int:
     from sentinelforge.db.bootstrap import bootstrap
 
@@ -153,6 +219,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate.set_defaults(func=cmd_events_validate)
 
+    generate = event_cmds.add_parser(
+        "generate", help="generate deterministic synthetic background events to a JSON Lines file"
+    )
+    generate.add_argument(
+        "--dataset-id", default="background", help="dataset label (default: background)"
+    )
+    generate.add_argument("--seed", type=int, default=1, help="random seed (default: 1)")
+    generate.add_argument(
+        "--days", type=int, default=1, help="number of days to generate (default: 1)"
+    )
+    generate.add_argument(
+        "--output", type=Path, help="output file (default: data/generated/<dataset>.jsonl)"
+    )
+    generate.set_defaults(func=cmd_events_generate)
+
+    ingest = event_cmds.add_parser(
+        "ingest", help="load an event file (.jsonl or .csv) into PostgreSQL, skipping duplicates"
+    )
+    ingest.add_argument("file", type=Path, help="path to a .jsonl or .csv file")
+    ingest.add_argument("--dataset-id", help="override the dataset label (default: the file name)")
+    ingest.add_argument(
+        "--max-errors", type=int, default=20, help="maximum errors to print (default: 20)"
+    )
+    ingest.set_defaults(func=cmd_events_ingest)
+
     # db
     db = groups.add_parser("db", help="database setup and health")
     db_cmds = db.add_subparsers(dest="command", metavar="ACTION", required=True)
@@ -161,6 +252,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="create or refresh the least-privilege app role and schema (uses the admin role)",
     )
     boot.set_defaults(func=cmd_db_bootstrap)
+    migrate_cmd = db_cmds.add_parser(
+        "migrate", help="apply pending SQL migrations (uses the admin role)"
+    )
+    migrate_cmd.set_defaults(func=cmd_db_migrate)
     status = db_cmds.add_parser("status", help="check connectivity and privileges as the app role")
     status.set_defaults(func=cmd_db_status)
 

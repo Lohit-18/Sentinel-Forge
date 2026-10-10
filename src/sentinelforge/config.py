@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import Field, SecretStr, field_validator
@@ -22,6 +23,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 IDENTIFIER_RE = re.compile(r"[a-z_][a-z0-9_]{0,62}")
 
 PLACEHOLDER_PREFIX = "change-me"
+
+# The repository root (src/sentinelforge/config.py -> ../../). Paths to configs,
+# rules and data are resolved from here, so commands work from any directory.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+ANALYST_RE = re.compile(r"[a-z][a-z0-9._-]{1,63}")
 
 
 class ConfigError(Exception):
@@ -79,6 +86,38 @@ class Settings(BaseSettings):
     db_connect_timeout: int = Field(default=5, ge=1, le=60)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
+    # Lab configuration and data locations.
+    config_dir: Path = PROJECT_ROOT / "configs"
+    data_dir: Path = PROJECT_ROOT / "data"
+    reports_dir: Path = PROJECT_ROOT / "reports"
+
+    # Analyst names offered by the dashboard and accepted by the CLI. This is a
+    # convenience for a single-user lab, not authentication (see docs/threat-model.md).
+    analysts: str = "analyst.one,analyst.two,analyst.three"
+
+    @property
+    def rules_dir(self) -> Path:
+        return self.config_dir / "rules"
+
+    @property
+    def inventory_path(self) -> Path:
+        return self.config_dir / "lab_inventory.yml"
+
+    @property
+    def analyst_names(self) -> list[str]:
+        return [name.strip() for name in self.analysts.split(",") if name.strip()]
+
+    @field_validator("analysts")
+    @classmethod
+    def _check_analysts(cls, value: str) -> str:
+        names = [name.strip() for name in value.split(",") if name.strip()]
+        if not names:
+            raise ValueError("at least one analyst name is required")
+        for name in names:
+            if not ANALYST_RE.fullmatch(name):
+                raise ValueError(f"invalid analyst name {name!r} (use letters, digits, . _ -)")
+        return value
+
     @field_validator("db_name", "db_schema", "db_admin_user", "db_app_user")
     @classmethod
     def _check_identifier(cls, value: str) -> str:
@@ -135,6 +174,8 @@ class Settings(BaseSettings):
             "db_app_user": self.db_app_user,
             "db_app_password": password_state(self.db_app_password),
             "log_level": self.log_level,
+            "config_dir": str(self.config_dir),
+            "analysts": ", ".join(self.analyst_names),
         }
 
 

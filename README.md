@@ -4,17 +4,23 @@
 
 A Python, PostgreSQL and Bash-based SOC lab for security log ingestion, threat detection, event correlation, incident investigation and security analytics. It runs entirely on your own computer and uses synthetic data only.
 
-> **Status: Phase 1 of 9 (foundation).** The event schema, configuration, database setup with a least-privilege role, and the first CLI commands work and are tested. Ingestion, detection, alerts, incidents and the dashboard are built in later phases (see [the roadmap](#roadmap)). This README is expanded with screenshots and verified results as features land.
+> **Status: Phases 1–2 of 9 complete.** The foundation (schema, configuration, and least-privilege database) and the event-ingestion pipeline (generation, normalisation, validation, storage, and duplicate detection) are implemented and tested. The latest integration run reported 164 passed and 1 skipped. Detection, alerts, incidents, and the dashboard are planned for later phases (see the [roadmap](#roadmap)).
 
 ## What works today
 
 | Feature | Command |
 |---|---|
-| Validate a JSON Lines file against the common event schema | `sentinelforge events validate FILE` |
-| Show normalised events (UTC times, lower-cased names) | `sentinelforge events validate --show-normalised FILE` |
+| Generate deterministic synthetic activity | `sentinelforge events generate --days 3` |
+| Validate an event file against the schema | `sentinelforge events validate FILE` |
+| Load events into PostgreSQL (skips duplicates) | `sentinelforge events ingest FILE` |
+| Apply database migrations | `sentinelforge db migrate` |
 | Create the least-privilege application role and schema | `sentinelforge db bootstrap` |
 | Check database connectivity and privileges | `sentinelforge db status` |
 | Show configuration with passwords hidden | `sentinelforge config show` |
+
+`sentinelforge events ingest` accepts JSON Lines or CSV, and maps other tools' field
+names and values (for example `TimeCreated`, `AccountName`, `FAILED`) onto the common
+schema automatically.
 
 ## Quick start
 
@@ -46,14 +52,23 @@ src/sentinelforge/
     config.py           SF_* settings from environment / .env (passwords hidden)
     timeutil.py         strict timestamp parsing, everything in UTC
     events/schema.py    the common SecurityEvent schema
-    events/validate.py  JSON Lines file validation
+    events/normalise.py map other tools' field names onto the schema
+    events/readers.py   read JSON Lines and CSV, record by record
+    events/fingerprint.py  duplicate detection
+    events/ingest.py    the ingestion pipeline
+    generator/          deterministic synthetic background activity
+    inventory.py        the synthetic lab organisation
     db/bootstrap.py     least-privilege role and schema setup
+    db/migrate.py       apply SQL migrations
+    db/events_repo.py   read/write events
     db/status.py        connectivity and privilege check
+migrations/             numbered SQL migrations
+configs/                lab inventory
 scripts/                setup, database setup, environment check, start/stop, lint, tests, licence check
 tests/unit/             fast tests, no database needed
 tests/integration/      tests against a real PostgreSQL server
 data/sample/            synthetic example events
-docs/                   architecture, event schema, installation, cost and licences
+docs/                   architecture, event + database schema, installation, cost and licences
 ```
 
 ## Testing
@@ -68,7 +83,7 @@ Integration tests use their own throwaway schema and role (`sf_test`, `sf_test_a
 ## Roadmap
 
 1. **Foundation**: configuration, event schema, database roles *(done)*
-2. Synthetic event generator, ingestion and storage
+2. **Synthetic event generator, ingestion and storage** *(done)*
 3. Detection rules
 4. Correlation, risk scoring and alerts
 5. Incident management and reports
@@ -81,6 +96,12 @@ Integration tests use their own throwaway schema and role (`sf_test`, `sf_test_a
 
 SentinelForge uses **synthetic data only**. It does not collect real traffic or credentials, does not run malware, and does not contact external systems. Example addresses come from ranges reserved for documentation (RFC 5737). The database listens on `127.0.0.1` only.
 
+## Try it
+
+```bash
+bash scripts/run_demo.sh   # start the lab, generate + ingest events, re-ingest (dedup), run tests
+```
+
 ## Licence
 
-A licence will be added before the first public release (MIT or Apache-2.0).
+MIT. See [LICENSE](LICENSE).

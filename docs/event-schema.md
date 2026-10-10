@@ -24,6 +24,11 @@ Phase 1 defines and validates the shape. Mapping raw source formats into it (ren
 | `parent_process_name` | string ≤260 | no | The process that started this one. |
 | `dataset_id` | token | no | Which dataset the event belongs to. |
 | `scenario_id` | token | no | Which synthetic scenario produced it. Used for evaluation, never by detection rules. |
+| `process_command_line` | string ≤4096 | no | The full command line, when the source provides it. |
+| `file_sha256` | 64 hex chars | no | SHA-256 of a file involved in the event. |
+| `dst_domain` | domain | no | Destination domain name for a connection. |
+| `target_user` | account | no | The account acted upon (e.g. added to a group). |
+| `object_name` | string ≤1024 | no | The thing acted on: a group, file path, setting or URL path. |
 | `raw` | object | no | The original record, kept as evidence. |
 
 Empty strings in optional fields are treated as "not provided". **Unknown fields are rejected**, so a typo such as `usr` is reported instead of being silently ignored.
